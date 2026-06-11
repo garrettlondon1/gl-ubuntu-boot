@@ -29,7 +29,8 @@ echo '
 echo "▶ Importing Microsoft package signing key..."
 MICROSOFT_KEY_FINGERPRINT="EE4D7792F748182B"
 curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
-  | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/microsoft.gpg
+  | gpg --dearmor \
+  | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
 # Verify the expected key fingerprint is present
 if ! gpg --no-default-keyring --keyring /etc/apt/trusted.gpg.d/microsoft.gpg \
        --fingerprint 2>/dev/null | grep -qi "${MICROSOFT_KEY_FINGERPRINT}"; then
