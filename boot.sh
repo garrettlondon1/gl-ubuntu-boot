@@ -32,10 +32,26 @@ echo "▶ Importing Microsoft package signing key..."
 MICROSOFT_KEY_FINGERPRINT="BC528686B50D79E339D3721CEB3E94ADBE1229CF"
 MICROSOFT_KEY_FINGERPRINT_LEGACY="EB3E94ADBE1229CF"
 
-sudo install -d -m 0755 /etc/apt/trusted.gpg.d
+sudo install -d -m 0755 /etc/apt/trusted.gpg.d /usr/share/keyrings /etc/apt/keyrings
+
+# Dearmor once, then install the key at every path a Microsoft-provided
+# sources.list.d entry might reference via `signed-by=`. Without this, an
+# existing vscode / vscode-insiders / edge / prod source file will fail
+# `apt-get update` with "repository ... is not signed" even though the key
+# is present in trusted.gpg.d (signed-by overrides the global trust store).
+MS_KEY_TMP=$(mktemp)
 curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
-  | gpg --dearmor \
-  | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
+  | gpg --dearmor > "$MS_KEY_TMP"
+
+for dest in \
+    /etc/apt/trusted.gpg.d/microsoft.gpg \
+    /usr/share/keyrings/microsoft.gpg \
+    /usr/share/keyrings/microsoft-archive-keyring.gpg \
+    /usr/share/keyrings/microsoft-prod.gpg \
+    /etc/apt/keyrings/microsoft.gpg ; do
+  sudo install -m 0644 "$MS_KEY_TMP" "$dest"
+done
+rm -f "$MS_KEY_TMP"
 
 # Verify the expected key fingerprint is present. gpg formats the fingerprint
 # with spaces between every 4 hex chars, so strip whitespace before matching.
