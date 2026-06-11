@@ -59,6 +59,15 @@ echo "▶ Cloning gl-ubuntu-dev..."
 rm -rf ~/.local/share/omakub
 gh repo clone garrettlondon1/gl-ubuntu-dev ~/.local/share/omakub
 
+# ─── Import Microsoft GPG key ─────────────────────────────────────────────────
+# Required for Ubuntu 26.04+ where apt may not yet have the Microsoft signing key
+
+echo ""
+echo "▶ Importing Microsoft package signing key..."
+curl -sL https://packages.microsoft.com/keys/microsoft.asc \
+  | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/microsoft.gpg
+echo "  ✓ Microsoft GPG key imported"
+
 # ─── Run setup ────────────────────────────────────────────────────────────────
 
 echo ""
