@@ -27,17 +27,32 @@ echo '
 # apt-get update fails with a "not signed" error and the script exits.
 
 echo "▶ Importing Microsoft package signing key..."
-MICROSOFT_KEY_FINGERPRINT="EE4D7792F748182B"
+# Current Microsoft package signing key full fingerprint (rotated from the
+# older EE4D7792F748182B short ID). See https://packages.microsoft.com/keys/
+MICROSOFT_KEY_FINGERPRINT="BC528686B50D79E339D3721CEB3E94ADBE1229CF"
+MICROSOFT_KEY_FINGERPRINT_LEGACY="EB3E94ADBE1229CF"
+
+sudo install -d -m 0755 /etc/apt/trusted.gpg.d
 curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
   | gpg --dearmor \
   | sudo tee /etc/apt/trusted.gpg.d/microsoft.gpg > /dev/null
-# Verify the expected key fingerprint is present
-if ! gpg --no-default-keyring --keyring /etc/apt/trusted.gpg.d/microsoft.gpg \
-       --fingerprint 2>/dev/null | grep -qi "${MICROSOFT_KEY_FINGERPRINT}"; then
-  echo "  ✗ ERROR: Microsoft GPG key fingerprint ${MICROSOFT_KEY_FINGERPRINT} not found — aborting."
+
+# Verify the expected key fingerprint is present. gpg formats the fingerprint
+# with spaces between every 4 hex chars, so strip whitespace before matching.
+ACTUAL_FPS=$(gpg --no-default-keyring --keyring /etc/apt/trusted.gpg.d/microsoft.gpg \
+               --with-colons --fingerprint 2>/dev/null \
+             | awk -F: '/^fpr:/ {print $10}')
+
+if echo "$ACTUAL_FPS" | grep -qi "^${MICROSOFT_KEY_FINGERPRINT}$"; then
+  echo "  ✓ Microsoft GPG key imported and verified (${MICROSOFT_KEY_FINGERPRINT})"
+elif echo "$ACTUAL_FPS" | grep -qi "${MICROSOFT_KEY_FINGERPRINT_LEGACY}$"; then
+  echo "  ✓ Microsoft GPG key imported and verified (legacy key)"
+else
+  echo "  ✗ ERROR: Microsoft GPG key fingerprint did not match expected value."
+  echo "    Expected: ${MICROSOFT_KEY_FINGERPRINT}"
+  echo "    Found:    ${ACTUAL_FPS:-<none>}"
   exit 1
 fi
-echo "  ✓ Microsoft GPG key imported and verified (${MICROSOFT_KEY_FINGERPRINT})"
 
 # ─── Install git + gh CLI ─────────────────────────────────────────────────────
 
