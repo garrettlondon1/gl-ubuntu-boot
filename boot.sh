@@ -26,23 +26,41 @@ echo '
 # sources configured (e.g. from a previous VS Code install).  Without this key
 # apt-get update fails with a "not signed" error and the script exits.
 
-echo "▶ Importing Microsoft package signing key..."
-# Current Microsoft package signing key full fingerprint (rotated from the
-# older EE4D7792F748182B short ID). See https://packages.microsoft.com/keys/
-MICROSOFT_KEY_FINGERPRINT="BC528686B50D79E339D3721CEB3E94ADBE1229CF"
-MICROSOFT_KEY_FINGERPRINT_LEGACY="EB3E94ADBE1229CF"
+echo "▶ Importing Microsoft package signing keys..."
+# Microsoft rotated their Linux signing key in Spring 2025. Newer repos
+# (e.g. packages.microsoft.com/ubuntu/26.04/prod) are signed with the new
+# key (short ID EE4D7792F748182B, distributed in microsoft-rolling.asc),
+# while older repos still use the legacy key (short ID EB3E94ADBE1229CF,
+# distributed in microsoft.asc). Install BOTH so apt-get update succeeds
+# regardless of which Microsoft repos are configured.
+MS_KEY_NEW_ID="EE4D7792F748182B"
+MS_KEY_OLD_ID="EB3E94ADBE1229CF"
 
 sudo install -d -m 0755 /etc/apt/trusted.gpg.d /usr/share/keyrings /etc/apt/keyrings
 
-# Dearmor once, then install the key at every path a Microsoft-provided
-# sources.list.d entry might reference via `signed-by=`. Without this, an
-# existing vscode / vscode-insiders / edge / prod source file will fail
-# `apt-get update` with "repository ... is not signed" even though the key
-# is present in trusted.gpg.d (signed-by overrides the global trust store).
 MS_KEY_TMP=$(mktemp)
-curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
-  | gpg --dearmor > "$MS_KEY_TMP"
+{
+  curl -fsSL https://packages.microsoft.com/keys/microsoft-rolling.asc \
+    || curl -fsSL https://packages.microsoft.com/keys/microsoft-2025.asc
+  echo
+  curl -fsSL https://packages.microsoft.com/keys/microsoft.asc
+} | gpg --dearmor > "$MS_KEY_TMP"
 
+# Sanity-check: both expected key IDs must be present in the combined keyring.
+FOUND_IDS=$(gpg --no-default-keyring --keyring "$MS_KEY_TMP" \
+              --with-colons --fingerprint 2>/dev/null \
+            | awk -F: '/^fpr:/ {print $10}')
+for id in "$MS_KEY_NEW_ID" "$MS_KEY_OLD_ID"; do
+  if ! echo "$FOUND_IDS" | grep -qi "${id}$"; then
+    echo "  ✗ ERROR: Microsoft GPG key ${id} not found in downloaded keys."
+    echo "    Got: ${FOUND_IDS:-<none>}"
+    rm -f "$MS_KEY_TMP"
+    exit 1
+  fi
+done
+
+# Install the combined keyring everywhere a Microsoft sources.list.d entry
+# might reference it via signed-by= (or the global trust store).
 for dest in \
     /etc/apt/trusted.gpg.d/microsoft.gpg \
     /usr/share/keyrings/microsoft.gpg \
@@ -52,23 +70,7 @@ for dest in \
   sudo install -m 0644 "$MS_KEY_TMP" "$dest"
 done
 rm -f "$MS_KEY_TMP"
-
-# Verify the expected key fingerprint is present. gpg formats the fingerprint
-# with spaces between every 4 hex chars, so strip whitespace before matching.
-ACTUAL_FPS=$(gpg --no-default-keyring --keyring /etc/apt/trusted.gpg.d/microsoft.gpg \
-               --with-colons --fingerprint 2>/dev/null \
-             | awk -F: '/^fpr:/ {print $10}')
-
-if echo "$ACTUAL_FPS" | grep -qi "^${MICROSOFT_KEY_FINGERPRINT}$"; then
-  echo "  ✓ Microsoft GPG key imported and verified (${MICROSOFT_KEY_FINGERPRINT})"
-elif echo "$ACTUAL_FPS" | grep -qi "${MICROSOFT_KEY_FINGERPRINT_LEGACY}$"; then
-  echo "  ✓ Microsoft GPG key imported and verified (legacy key)"
-else
-  echo "  ✗ ERROR: Microsoft GPG key fingerprint did not match expected value."
-  echo "    Expected: ${MICROSOFT_KEY_FINGERPRINT}"
-  echo "    Found:    ${ACTUAL_FPS:-<none>}"
-  exit 1
-fi
+echo "  ✓ Microsoft GPG keys imported (legacy ${MS_KEY_OLD_ID} + rolling ${MS_KEY_NEW_ID})"
 
 # ─── Install git + gh CLI ─────────────────────────────────────────────────────
 
