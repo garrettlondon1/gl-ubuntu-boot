@@ -59,6 +59,22 @@ echo "▶ Cloning gl-ubuntu-dev..."
 rm -rf ~/.local/share/omakub
 gh repo clone garrettlondon1/gl-ubuntu-dev ~/.local/share/omakub
 
+# ─── Import Microsoft GPG key ─────────────────────────────────────────────────
+# Required for Ubuntu 26.04+ where apt may not yet have the Microsoft signing key
+
+echo ""
+echo "▶ Importing Microsoft package signing key..."
+MICROSOFT_KEY_FINGERPRINT="EE4D7792F748182B"
+curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+  | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/microsoft.gpg
+# Verify the expected key fingerprint is present
+if ! gpg --no-default-keyring --keyring /etc/apt/trusted.gpg.d/microsoft.gpg \
+       --fingerprint 2>/dev/null | grep -qi "${MICROSOFT_KEY_FINGERPRINT}"; then
+  echo "  ✗ ERROR: Microsoft GPG key fingerprint ${MICROSOFT_KEY_FINGERPRINT} not found — aborting."
+  exit 1
+fi
+echo "  ✓ Microsoft GPG key imported and verified (${MICROSOFT_KEY_FINGERPRINT})"
+
 # ─── Run setup ────────────────────────────────────────────────────────────────
 
 echo ""
